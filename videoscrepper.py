@@ -32,7 +32,7 @@ OUTPUT = "urls.txt"  # Output file (None to skip)
 DOMAIN = "https://xhamster.com"  # Base domain
 START_PAGE = 1  # Start page number
 END_PAGE = 22921  # End page number
-DELAY = 1.5  # Delay between requests in seconds
+DELAY = 10  # Delay between requests in seconds
 
 MONGODB_URI = "mongodb+srv://indiandigitalservice01:V2aQpeBve8H54rRW@sarkariresult.womtf2i.mongodb.net/xxxdata"
 MONGODB_COLLECTION = "video_urls"  # Collection name
