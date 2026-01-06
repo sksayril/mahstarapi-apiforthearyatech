@@ -31,7 +31,7 @@ INPUT = "https://xhamster.com/1"  # URL or file path
 OUTPUT = "urls.txt"  # Output file (None to skip)
 DOMAIN = "https://xhamster.com"  # Base domain
 START_PAGE = 1  # Start page number
-END_PAGE = 1000  # End page number
+END_PAGE = 22921  # End page number
 DELAY = 1.5  # Delay between requests in seconds
 
 MONGODB_URI = "mongodb+srv://indiandigitalservice01:V2aQpeBve8H54rRW@sarkariresult.womtf2i.mongodb.net/xxxdata"
