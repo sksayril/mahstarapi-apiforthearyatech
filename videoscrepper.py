@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 """
 Simple scraper to extract xHamster video URLs from a local HTML file or a page URL.
-Usage examples:
-  python videoscrepper.py --input data.html --output urls.json
-  python videoscrepper.py --input https://xhamster.com/1 --output urls.txt
-
-Requires: requests, beautifulsoup4
-Install: pip install requests beautifulsoup4
+Hardcoded configuration - edit the values below to change settings.
 """
 
-import argparse
 import json
 import os
 import re
@@ -28,6 +22,21 @@ try:
     HAS_MONGODB = True
 except ImportError:
     HAS_MONGODB = False
+
+
+# ============================================================================
+# CONFIGURATION - Edit these values to change behavior
+# ============================================================================
+INPUT = "https://xhamster.com/1"  # URL or file path
+OUTPUT = "urls.txt"  # Output file (None to skip)
+DOMAIN = "https://xhamster.com"  # Base domain
+START_PAGE = 1  # Start page number
+END_PAGE = 1000  # End page number
+DELAY = 1.5  # Delay between requests in seconds
+
+MONGODB_URI = "mongodb+srv://indiandigitalservice01:V2aQpeBve8H54rRW@sarkariresult.womtf2i.mongodb.net/xxxdata"
+MONGODB_COLLECTION = "video_urls"  # Collection name
+# ============================================================================
 
 
 def extract_video_urls(html: str, domain: str = "https://xhamster.com") -> list:
@@ -89,84 +98,20 @@ def extract_video_urls(html: str, domain: str = "https://xhamster.com") -> list:
             seen.add(href)
             results.append(href)
 
-    # Regex fallback: extract only xhamster.com/videos/ URLs (not previews)
-    pattern = re.compile(r"https?://xhamster\.com/videos/[-A-Za-z0-9_%]+(?:[-A-Za-z0-9_%/]+)?")
-    for match in pattern.finditer(html):
-        url = match.group(0)
-        if is_valid_video_url(url) and url not in seen:
-            seen.add(url)
-            results.append(url)
-
     return results
 
 
-def save_to_mongodb(urls: list, mongodb_uri: str, collection_name: str):
-    """Save URLs to MongoDB one by one, avoiding duplicates"""
-    if not HAS_MONGODB:
-        print("\n✗ MongoDB support requires 'pymongo'. Install with: pip install pymongo")
-        return
-    
-    try:
-        print(f"\n=== Saving to MongoDB ===")
-        print(f"Connecting to: {mongodb_uri.split('@')[1] if '@' in mongodb_uri else 'local'}")
-        
-        client = pymongo.MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
-        # Test connection
-        client.admin.command('ping')
-        print("✓ Connected to MongoDB")
-        
-        # Get database and collection
-        db_name = mongodb_uri.split('/')[-1].split('?')[0] if '/' in mongodb_uri else 'default'
-        db = client[db_name]
-        collection = db[collection_name]
-        
-        print(f"✓ Using database: {db_name}, collection: {collection_name}")
-        
-        # Insert URLs one by one, avoiding duplicates
-        inserted = 0
-        skipped = 0
-        
-        for idx, url in enumerate(urls, 1):
-            try:
-                # Insert only if URL doesn't exist
-                result = collection.insert_one({
-                    "url": url,
-                    "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "source": "videoscrepper"
-                })
-                inserted += 1
-                if idx % 10 == 0:
-                    print(f"  Inserted {inserted}/{len(urls)} URLs...")
-            except pymongo.errors.DuplicateKeyError:
-                skipped += 1
-            except Exception as e:
-                print(f"  Error inserting URL {url}: {e}")
-        
-        print(f"\n✓ MongoDB Save Complete")
-        print(f"  - Inserted: {inserted} new URLs")
-        print(f"  - Skipped: {skipped} duplicate URLs")
-        print(f"  - Total: {len(urls)} URLs processed")
-        
-        client.close()
-    except Exception as e:
-        print(f"\n✗ Error connecting to MongoDB: {e}")
-        print("  Ensure the connection string is correct and the database is accessible.")
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Extract xHamster video URLs from HTML file or page URL(s) with pagination support")
-    parser.add_argument("--input", "-i", required=True, help="Path to local HTML file or a page URL (e.g., https://xhamster.com/1)")
-    parser.add_argument("--output", "-o", help="Output file (json or txt). If omitted, prints to stdout")
-    parser.add_argument("--domain", default="https://xhamster.com", help="Base domain to resolve relative links")
-    parser.add_argument("--start-page", type=int, default=1, help="Start page number (for URL pagination, default: 1)")
-    parser.add_argument("--end-page", type=int, help="End page number (inclusive). If omitted, scrapes only the input page")
-    parser.add_argument("--delay", type=float, default=1.0, help="Delay between page requests in seconds (default: 1.0)")
-    parser.add_argument("--mongodb-uri", help="MongoDB connection URI (e.g., mongodb+srv://user:pass@host/dbname)")
-    parser.add_argument("--mongodb-collection", default="video_urls", help="MongoDB collection name (default: video_urls)")
-
-    args = parser.parse_args()
-
-    input_src = args.input
+    """Main function using hardcoded configuration"""
+    input_src = INPUT
+    output_file_path = OUTPUT
+    domain = DOMAIN
+    start = START_PAGE
+    end = END_PAGE
+    delay = DELAY
+    mongodb_uri = MONGODB_URI
+    mongodb_collection = MONGODB_COLLECTION
+    
     global_seen = set()  # Track seen URLs across all pages
     total_urls = 0
 
@@ -175,26 +120,27 @@ def main():
 
     # Initialize output file if requested
     output_file = None
-    if args.output and is_url:
+    if output_file_path and is_url:
         try:
-            output_file = open(args.output, "w", encoding="utf-8")
+            output_file = open(output_file_path, "w", encoding="utf-8")
         except Exception as e:
             print(f"✗ Error opening output file: {e}")
             sys.exit(1)
 
     # Initialize MongoDB connection if requested
     db_collection = None
-    if args.mongodb_uri:
+    client = None
+    if mongodb_uri:
         if not HAS_MONGODB:
             print("✗ MongoDB support requires 'pymongo'. Install with: pip install pymongo")
             sys.exit(1)
         try:
-            client = pymongo.MongoClient(args.mongodb_uri, serverSelectionTimeoutMS=5000)
+            client = pymongo.MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
             client.admin.command('ping')
-            db_name = args.mongodb_uri.split('/')[-1].split('?')[0] if '/' in args.mongodb_uri else 'default'
+            db_name = mongodb_uri.split('/')[-1].split('?')[0] if '/' in mongodb_uri else 'default'
             db = client[db_name]
-            db_collection = db[args.mongodb_collection]
-            print(f"✓ Connected to MongoDB: {db_name}/{args.mongodb_collection}")
+            db_collection = db[mongodb_collection]
+            print(f"✓ Connected to MongoDB: {db_name}/{mongodb_collection}")
         except Exception as e:
             print(f"✗ Error connecting to MongoDB: {e}")
             if output_file:
@@ -203,22 +149,17 @@ def main():
 
     if is_url:
         # URL mode: loop through pages and save each immediately
-        base_url = input_src
-        start = args.start_page
-        end = args.end_page if args.end_page else args.start_page
-
         print(f"Scraping pages {start} to {end}...")
         for page in range(start, end + 1):
             try:
                 # Build page URL
-                if page == 1 and base_url.rstrip("/").endswith(("https://xhamster.com", "xhamster.com")):
-                    page_url = base_url.rstrip("/") + "/1"
+                if page == 1 and input_src.rstrip("/").endswith(("https://xhamster.com", "xhamster.com")):
+                    page_url = input_src.rstrip("/") + "/1"
                 else:
-                    import re as re_module
-                    if re_module.search(r'/\d+$', base_url):
-                        page_url = re_module.sub(r'/\d+$', f'/{page}', base_url)
+                    if re.search(r'/\d+$', input_src):
+                        page_url = re.sub(r'/\d+$', f'/{page}', input_src)
                     else:
-                        page_url = base_url.rstrip("/") + f"/{page}"
+                        page_url = input_src.rstrip("/") + f"/{page}"
 
                 print(f"\n  Page {page}: {page_url}")
                 r = requests.get(page_url, timeout=15)
@@ -226,7 +167,7 @@ def main():
                 html = r.text
                 
                 # Extract URLs from this page only
-                urls = extract_video_urls(html, domain=args.domain)
+                urls = extract_video_urls(html, domain=domain)
                 page_new_urls = 0
                 
                 # Process each URL immediately (don't load all in memory)
@@ -259,7 +200,7 @@ def main():
                 
                 # Delay between requests
                 if page < end:
-                    time.sleep(args.delay)
+                    time.sleep(delay)
                     
             except Exception as e:
                 print(f"  ✗ Error fetching page {page}: {e}")
@@ -268,10 +209,11 @@ def main():
         # Close file
         if output_file is not None:
             output_file.close()
-            print(f"\n✓ Saved {total_urls} URLs to: {args.output}")
+            print(f"\n✓ Saved {total_urls} URLs to: {output_file_path}")
         
         # Close MongoDB
-        if db_collection is not None:
+        if client is not None:
+            client.close()
             print(f"✓ Saved {total_urls} URLs to MongoDB")
     
     else:
@@ -283,28 +225,28 @@ def main():
         with open(input_src, "r", encoding="utf-8", errors="replace") as fh:
             html = fh.read()
         
-        all_urls = extract_video_urls(html, domain=args.domain)
+        all_urls = extract_video_urls(html, domain=domain)
         
         print(f"\n=== Summary ===")
         print(f"Total URLs found: {len(all_urls)}")
-        print(json.dumps(all_urls, indent=2))
         
         # Save file mode
-        if args.output:
+        if output_file_path:
             try:
-                if args.output.lower().endswith(".json"):
-                    with open(args.output, "w", encoding="utf-8") as f:
+                if output_file_path.lower().endswith(".json"):
+                    with open(output_file_path, "w", encoding="utf-8") as f:
                         json.dump(all_urls, f, ensure_ascii=False, indent=2)
                 else:
-                    with open(args.output, "w", encoding="utf-8") as f:
+                    with open(output_file_path, "w", encoding="utf-8") as f:
                         for u in all_urls:
                             f.write(u + "\n")
-                print(f"✓ Saved {len(all_urls)} URLs to: {args.output}")
+                print(f"✓ Saved {len(all_urls)} URLs to: {output_file_path}")
             except Exception as e:
                 print(f"✗ Error saving output: {e}")
         
         # Save MongoDB for file mode
         if db_collection is not None:
+            inserted = 0
             for url in all_urls:
                 try:
                     db_collection.insert_one({
@@ -312,11 +254,14 @@ def main():
                         "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                         "source": "videoscrepper"
                     })
+                    inserted += 1
                 except pymongo.errors.DuplicateKeyError:
                     pass
                 except Exception as e:
                     print(f"Error: {e}")
-            print(f"✓ Saved {len(all_urls)} URLs to MongoDB")
+            if client is not None:
+                client.close()
+            print(f"✓ Saved {inserted} URLs to MongoDB")
 
 
 if __name__ == "__main__":
