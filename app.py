@@ -85,9 +85,75 @@ def process_video_url(video_url, source_collection, dest_collection, source_doc_
         print(f"Thumbnail: {video_object.thumbnail}")
         print(f"Pornstars: {video_object.pornstars}")
         
+        # Debug: Print all available attributes (for troubleshooting)
+        if hasattr(video_object, '__dict__'):
+            print(f"Available attributes: {list(video_object.__dict__.keys())}")
+        
         # Get M3U8 base URL
         m3u8_url = video_object.m3u8_base_url
         print(f"M3U8 URL: {m3u8_url}")
+        
+        # Get video duration (in seconds) - try multiple methods
+        video_duration = None
+        
+        # Method 1: Check common duration attributes
+        duration_attrs = ['duration', 'duration_seconds', 'length', 'time', 'runtime', 'video_duration', 'total_duration']
+        for attr in duration_attrs:
+            if hasattr(video_object, attr):
+                value = getattr(video_object, attr)
+                if value is not None:
+                    video_duration = value
+                    print(f"Found duration via {attr}: {video_duration}")
+                    break
+        
+        # Method 2: Check if duration is in __dict__
+        if video_duration is None and hasattr(video_object, '__dict__'):
+            obj_dict = video_object.__dict__
+            for key, value in obj_dict.items():
+                if 'duration' in key.lower() or 'length' in key.lower() or 'time' in key.lower():
+                    if value is not None and isinstance(value, (int, float)):
+                        video_duration = value
+                        print(f"Found duration via {key}: {video_duration}")
+                        break
+        
+        # Method 3: Try to get from video object properties
+        if video_duration is None:
+            try:
+                # Check if there's a get_duration method
+                if hasattr(video_object, 'get_duration'):
+                    video_duration = video_object.get_duration()
+                # Check if there's a duration property
+                elif hasattr(type(video_object), 'duration'):
+                    prop = getattr(type(video_object), 'duration')
+                    if hasattr(prop, 'fget'):
+                        video_duration = prop.fget(video_object)
+            except:
+                pass
+        
+        # Convert duration to seconds if it's in a different format
+        if video_duration is not None:
+            # If it's a string like "10:30" (minutes:seconds), convert to seconds
+            if isinstance(video_duration, str):
+                try:
+                    if ':' in video_duration:
+                        parts = video_duration.split(':')
+                        if len(parts) == 2:  # MM:SS
+                            video_duration = int(parts[0]) * 60 + int(parts[1])
+                        elif len(parts) == 3:  # HH:MM:SS
+                            video_duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                    else:
+                        video_duration = float(video_duration)
+                except:
+                    video_duration = None
+            # Ensure it's an integer
+            if video_duration is not None:
+                video_duration = int(video_duration)
+        
+        if video_duration:
+            print(f"Duration: {video_duration} seconds ({video_duration // 60}:{video_duration % 60:02d})")
+        else:
+            print("Duration: Not available - will be set to 0")
+            video_duration = 0
         
         # Prepare video data structure
         video_data = {
@@ -96,6 +162,7 @@ def process_video_url(video_url, source_collection, dest_collection, source_doc_
             },
             "Title": video_object.title,
             "Description": None,
+            "Duration": video_duration if video_duration else 0,
             "PendingQualities": [],
             "Category": {
                 "$oid": "6947c195bc9e939536a9291a"
@@ -190,12 +257,16 @@ def process_video_url(video_url, source_collection, dest_collection, source_doc_
         result = dest_collection.insert_one(mongo_data)
         print(f"✓ Video data saved to MongoDB with _id: {result.inserted_id}")
         
-        # Update source document with success: true
+        # Update source document with success: true and duration
+        update_data = {"success": True}
+        if video_duration:
+            update_data["duration"] = video_duration
+        
         source_collection.update_one(
             {"_id": source_doc_id},
-            {"$set": {"success": True}}
+            {"$set": update_data}
         )
-        print(f"✓ Source document updated with success: true")
+        print(f"✓ Source document updated with success: true" + (f" and duration: {video_duration}s" if video_duration else ""))
         
         return True
         
